@@ -95,10 +95,18 @@ def main(data, summary=True):
         
 
 def main2(files):
-    pass
+    from collections import defaultdict
+    d = defaultdict(list)
+    for f in files:
+        data = open(f).read()
+        for match in re.finditer(DEPEND, data, flags=re.DOTALL):
+            d[POM.from_match(match)].append(f)
 
+    for pom, files in sorted(d.iteritems(), key=lambda x: str(x[0])):
+        print pom, files
+    
 
 if __name__ == "__main__":
     import sys
-    main(sys.stdin.read(), sys.argv[1] != 'detailed')
-
+    #main(sys.stdin.read(), sys.argv[1] != 'detailed')
+    main2(sys.argv[1:])
