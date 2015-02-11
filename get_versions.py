@@ -12,6 +12,18 @@ DEPEND = r"""<dependency>\s*
 SIMPLE_DEPEND = r"POM\s+(?P<groupId>[\-\.\w]+)\s*;\s*(?P<artifactId>[\$\{\}\-\.\w]+)\s*;\s*(?P<version>[\$\{\}\.\-\w]+)"
 
 
+class Sep(str):
+    SEP_HASH = hash(object())
+    def __eq__(self, other):
+            return isinstance(other, Sep)
+    def __hash__(self):
+            return SEP_HASH
+    def __repr__(self):
+            return "Sep(%s)" % self
+
+to_sep = lambda x: x if x not in ['.', '-'] else Sep(x)
+to_sep_seq = lambda l: [to_sep(x) for x in l] + [Sep('')]
+
 class POM(object):
     def __init__(self, group_id, artifact_id, version):
         self.group_id = group_id
@@ -35,20 +47,21 @@ class POM(object):
 
     def find_overlap(self, elem1, elem2):
         for idx,_ in enumerate(elem2):
-            if all(x==y for x,y in zip(elem1[-idx-1:], elem2[:idx+1])):
-                return idx+1
-        return 0
+            pos = idx+1
+            if all(x==y for x,y in zip(elem1[-pos:], elem2[:pos])):
+                return pos
+        return 0  
 
     def get_version(self):
         artifact_id = self.artifact_id.partition('_')[0]
 
-        group_id_elements = re.split(r"[\-\.]", self.group_id)
-        artifact_id_elements = artifact_id.split('-')    
+        group_id_elements = to_sep_seq(self.group_id)
+        artifact_id_elements = to_sep_seq(artifact_id)    
 
         pos = self.find_overlap(group_id_elements, artifact_id_elements)        
 
         data = [self.group_id]
-        artifact_part = "-".join(artifact_id_elements[pos:])
+        artifact_part = "".join(artifact_id_elements[pos:])
         if artifact_part:
             data.append(artifact_part)
         
@@ -108,5 +121,5 @@ def main2(files):
 
 if __name__ == "__main__":
     import sys
-    #main(sys.stdin.read(), sys.argv[1] != 'detailed')
-    main2(sys.argv[1:])
+    main(sys.stdin.read(), sys.argv[1] != 'detailed')
+    #main2(sys.argv[1:])
