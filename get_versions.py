@@ -90,15 +90,15 @@ class POM(object):
     
 
 def main(data, summary=True):
-    poms = []
+    poms = set()
     for match in re.finditer(DEPEND, data, flags=re.DOTALL):
-        poms.append(POM.from_match(match))
+        poms.add(POM.from_match(match))
     for match in re.finditer(SIMPLE_DEPEND, data):
-        poms.append(POM.from_match(match))
+        poms.add(POM.from_match(match))
 
     if summary:
         for pom in sorted(poms, key=str):
-            print pom, pom.get_version()
+            print pom #, pom.get_version()
     else:
         for pom in sorted(poms, key=str):
             print pom.get_version_property()
@@ -116,10 +116,10 @@ def main2(files):
             d[POM.from_match(match)].append(f)
 
     for pom, files in sorted(d.iteritems(), key=lambda x: str(x[0])):
-        print pom, files
+        print pom #, files
     
 
 if __name__ == "__main__":
     import sys
-    main(sys.stdin.read(), sys.argv[1] != 'detailed')
-    #main2(sys.argv[1:])
+    #main(sys.stdin.read(), sys.argv[1] != 'detailed')
+    main2(sys.argv[1:])
