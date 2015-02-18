@@ -1,6 +1,8 @@
 #! /usr/bin/python
 
 import re
+from functools import total_ordering
+import itertools
 
 DEPEND = r"""<dependency>\s*
 <groupId>(?P<groupId>[\-\.\w]+)</groupId>\s*
@@ -10,6 +12,11 @@ DEPEND = r"""<dependency>\s*
 </dependency>""".replace("\n",'')
 
 SIMPLE_DEPEND = r"POM\s+(?P<groupId>[\-\.\w]+)\s*;\s*(?P<artifactId>[\$\{\}\-\.\w]+)\s*;\s*(?P<version>[\$\{\}\.\-\w]+)"
+
+PATTERNS = DEPEND, SIMPLE_DEPEND
+
+SEPERATORS = ['.', '-']
+SEP_PATTERN = re.compile("[%s]" % "".join(("\\" + sep) for sep in SEPERATORS))
 
 
 class Sep(str):
@@ -21,14 +28,45 @@ class Sep(str):
     def __repr__(self):
             return "Sep(%s)" % self
 
-to_sep = lambda x: x if x not in ['.', '-'] else Sep(x)
+to_sep = lambda x: x if x not in SEPERATORS else Sep(x)
 to_sep_seq = lambda l: [to_sep(x) for x in l] + [Sep('')]
+
+def to_int(s):
+    try:
+        return int(s)
+    except:
+        return s
+
+@total_ordering
+class Version(object):
+    def __init__(self, version):
+        self.version = version
+        self.exploded = tuple(to_int(x) for x in SEP_PATTERN.split(version))
+    def __str__(self):
+        return self.version
+    __repr__ = __str__
+
+    def __hash__(self):
+        return hash(self.version)
+    
+    def __eq__(self, other):
+        return self.version == other.version
+
+    def __lt__(self, other):
+        for myver, otherver in zip(self.exploded, other.exploded):
+            if myver < otherver:
+                return True
+            if myver > otherver:
+                return False
+        return False
+            
+
 
 class POM(object):
     def __init__(self, group_id, artifact_id, version):
         self.group_id = group_id
         self.artifact_id = artifact_id
-        self.version = version
+        self.version = Version(version)
 
     @staticmethod
     def from_string(st):
@@ -87,39 +125,53 @@ class POM(object):
 
     def __hash__(self):
         return hash((self.group_id, self.artifact_id, self.version))  
+
+   
+def main():
+    args = parseargs()
     
+    from collections import defaultdict
+    d = defaultdict(set)
+    for f in args.files:
+        data = open(f).read()
+        for pattern in PATTERNS:
+            for match in re.finditer(pattern, data, flags=re.DOTALL):
+                pom = POM.from_match(match)
+                if all(pattern not in pom.group_id for pattern in args.exclude): 
+                    d[pom].add(f)
+                    
+    sorted_keys = sorted(d.keys(), key=str)
 
-def main(data, summary=True):
-    poms = set()
-    for match in re.finditer(DEPEND, data, flags=re.DOTALL):
-        poms.add(POM.from_match(match))
-    for match in re.finditer(SIMPLE_DEPEND, data):
-        poms.add(POM.from_match(match))
 
-    if summary:
-        for pom in sorted(poms, key=str):
-            print pom #, pom.get_version()
-    else:
-        for pom in sorted(poms, key=str):
+    if args.printfiles:
+        for pom in sorted_keys:
+            print pom, d[pom]
+
+    if args.versions:    
+        for pom in sorted_keys:
             print pom.get_version_property()
         print "\n"
-        for pom in sorted(poms, key=str):
-            print pom.get_depends()
-        
 
-def main2(files):
-    from collections import defaultdict
-    d = defaultdict(list)
-    for f in files:
-        data = open(f).read()
-        for match in re.finditer(DEPEND, data, flags=re.DOTALL):
-            d[POM.from_match(match)].append(f)
+    if args.dependencies:
+        for _, poms in itertools.groupby(sorted_keys, key=lambda pom: (pom.artifact_id, pom.group_id)):
+            print next(poms).get_depends()
 
-    for pom, files in sorted(d.iteritems(), key=lambda x: str(x[0])):
-        print pom #, files
-    
+def parseargs():
+    import argparse
 
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-v','--property-versions', dest='versions', action='store_true',
+                       default=False, help='print version properties')
+    parser.add_argument('-d','--dependencies', dest='dependencies', action='store_true',
+                       default=False, help='print dependency')    
+    parser.add_argument('-f','--print-with-files', dest='printfiles', action='store_true',
+                       default=False, help='print data with files')
+    parser.add_argument('-x','--exclude-pattern', dest='exclude', action='append',
+                       help='exclude a pom if the pattern appers in the pom group id')
+    parser.add_argument('files', nargs='+')
+
+    args = parser.parse_args()
+    return args
+     
 if __name__ == "__main__":
-    import sys
-    #main(sys.stdin.read(), sys.argv[1] != 'detailed')
-    main2(sys.argv[1:])
+    main()
